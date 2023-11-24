@@ -12,14 +12,14 @@ class OblioApi:
     secret = ''
     token_handler = None
 
-    def __init__(self, email, secret, token_handler = None) -> None:
+    def __init__(self, email: str, secret: str, token_handler = None) -> None:
         self.email = email
         self.secret = secret
         if token_handler == None:
             token_handler = OblioApiAccessToken()
         self.token_handler = token_handler
 
-    def set_cif(self, cif) -> None:
+    def set_cif(self, cif: str) -> None:
         self.cif = cif
 
     def create_doc(self, type: str, data: dict) -> dict:
@@ -27,11 +27,11 @@ class OblioApi:
             data['cif'] = self.cif
 
         if not 'cif' in data:
-            raise Exception('Empty cif')
+            raise OblioException('Empty cif')
 
         response = self.request('POST', '/api/docs/{}'.format(type), data)
         self._check_response(response)
-        return json.loads(response.read())
+        return json.loads(response.read().decode('utf-8'))
 
     def nomenclature(self, type: str = '', name: str = '', filters: dict = {}) -> dict:
         cif = ''
@@ -40,14 +40,14 @@ class OblioApi:
         elif type in ['companies', 'vat_rates', 'products', 'clients', 'series', 'languages', 'management']:
             cif = self._get_cif()
         else:
-            raise Exception('Type not implemented')
+            raise OblioException('Type not implemented')
 
         params = {** filters, cif: cif, name: name}
         uri = '/api/nomenclature/{}'.format(type) + '?' + urllib.parse.urlencode(params)
 
         response = self.request('GET', uri)
         self._check_response(response)
-        return json.loads(response.read())
+        return json.loads(response.read().decode('utf-8'))
         
     def request(self, method: str, uri: str, payload: dict = {}):
         access_token = self.get_access_token()
@@ -70,22 +70,23 @@ class OblioApi:
 
     def _get_cif(self) -> str:
         if self.cif == '':
-            raise Exception('Empty cif')
+            raise OblioException('Empty cif')
         return self.cif
     
     def _check_response(self, response):
         if response.status < 200 or response.status >= 300:
-            message = json.dumps(response.read())
+            message = json.loads(response.read().decode('utf-8'))
             if message == None:
                 message = {
                     'statusMessage': 'Error authorize token! HTTP status: {}'.format(response.status)
                 }
-            raise Exception(message['statusMessage'], code=response.status)
+            print(message)
+            raise OblioException(message['statusMessage'], code=response.status)
 
 
     def _generate_access_token(self) -> dict:
         if self.email == '' or self.secret == '':
-            raise Exception('Email or secret are empty!')
+            raise OblioException('Email or secret are empty!')
 
         headers = {
             'Host': self.base_url,
@@ -102,10 +103,10 @@ class OblioApi:
         conn.request('POST', '/api/authorize/token', headers = headers, body = json.dumps(payload))
         response = conn.getresponse()
         if response.status < 200 or response.status >= 300:
-            raise Exception('Error authorize token! HTTP status: {}'
+            raise OblioException('Error authorize token! HTTP status: {}'
                 .format(response.status), code=response.status)
 
-        return json.loads(response.read())
+        return json.loads(response.read().decode('utf-8'))
 
 
 class OblioApiAccessToken:
@@ -119,7 +120,7 @@ class OblioApiAccessToken:
         if os.path.exists(self.path):
             with open(self.path, 'r') as f:
                 access_token = json.loads(f.read())
-                if access_token != None and access_token['request_time'] + access_token['expires_in'] > int(time.time()):
+                if access_token != None and int(access_token['request_time']) + int(access_token['expires_in']) > int(time.time()):
                     return access_token
 
         return None
@@ -127,6 +128,13 @@ class OblioApiAccessToken:
     def set(self, access_token: dict) -> None:
         with open(self.path, 'w') as f:
             f.write(json.dumps(access_token))
+
+
+class OblioException(Exception):
+    def __init__(self, text: str, code: int = 0) -> None:
+        self.text = text
+        self.code = code
+        super().__init__(self.text)
 
 
 if __name__ == '__main__':
