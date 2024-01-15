@@ -42,7 +42,7 @@ class OblioApi:
         else:
             raise OblioException('Type not implemented')
 
-        params = {** filters, cif: cif, name: name}
+        params = {** filters, 'cif': cif, 'name': name}
         uri = '/api/nomenclature/{}'.format(type) + '?' + urllib.parse.urlencode(params)
 
         response = self.request('GET', uri)
